@@ -14,10 +14,13 @@ import (
 
 func newUpvestTransactor(c *upvest.ClienteleAPI) *bind.TransactOpts {
 	conf, err := getConfig()
+	if err != nil {
+		log.Panic(err)
+	}
 
 	w, err := c.Wallet.Get(conf.UpvestWalletID)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	fromAddress := common.HexToAddress(w.Address)
