@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"log"
 	"strconv"
 
@@ -42,7 +41,14 @@ func newUpvestTransactor(c *upvest.ClienteleAPI) *bind.TransactOpts {
 
 			// Convert and concat R, S and V components into []byte{}
 			r, err := base64.StdEncoding.DecodeString(upvestSignature.R)
+			if err != nil {
+				return nil, err
+			}
+
 			s, err := base64.StdEncoding.DecodeString(upvestSignature.S)
+			if err != nil {
+				return nil, err
+			}
 
 			recover, err := strconv.Atoi(upvestSignature.Recover)
 			if err != nil {
@@ -53,7 +59,6 @@ func newUpvestTransactor(c *upvest.ClienteleAPI) *bind.TransactOpts {
 
 			signature := append(r, s...)
 			signature = append(signature, v)
-			fmt.Println(string(signature), len(signature))
 
 			return tx.WithSignature(signer, signature)
 		},
