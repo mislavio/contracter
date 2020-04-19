@@ -30,6 +30,3 @@ jobs:
 
     - name: Go report card
       uses: creekorful/goreportcard-action@v1.0
-
-    - name: Go-Linty
-      uses: ArangoGutierrez/GoLinty-Action@go-1.13rc1-alpine
