@@ -39,3 +39,15 @@ Then, execute the binary.
 ```bash
 ./contracter
 ```
+Finally...
+```bash
+curl http://localhost:8000/
+```
+Example Response:
+```
+The Address of the contract is: 
+0x269c2BaeFA9F08CE86AB4ba44dB558f82431930b
+
+The transaction hash is: 
+0x7ce15a3eb5b3dbee27f9e9ec3f45fe0d38293342b0be2121b48eb33857ca579e
+```
