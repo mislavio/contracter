@@ -2,6 +2,7 @@
 Smart Contract Abstraction Layer. 
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/mislavio/contracter)](https://goreportcard.com/report/github.com/mislavio/contracter)
+![Go](https://github.com/mislavio/contracter/workflows/Go/badge.svg)
 
 ## Config
 To run the POC happy path you must have:
