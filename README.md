@@ -45,7 +45,7 @@ curl http://localhost:8000/
 ```
 Example Response:
 ```
-The Address of the contract is: 
+The address of the contract is: 
 0x269c2BaeFA9F08CE86AB4ba44dB558f82431930b
 
 The transaction hash is: 
