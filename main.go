@@ -6,14 +6,20 @@ import (
 	"io/ioutil"
 	"log"
 	"math/big"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/rs/cors"
 	"gopkg.in/yaml.v2"
+
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 
 	"github.com/upvestco/upvest-go"
 )
@@ -31,6 +37,8 @@ type configuration struct {
 	SmartContractBytecode string `yaml:"smartContractBytecode"`
 	InfuraProjectID       string `yaml:"infuraProjectID"`
 }
+
+const listenPort int = 8000
 
 func getConfig() (*configuration, error) {
 	var conf configuration
@@ -52,15 +60,15 @@ func getConfig() (*configuration, error) {
 	return &conf, nil
 }
 
-func main() {
+func deployContract() (string, string) {
 	conf, err := getConfig()
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	ethClient, err := ethclient.Dial("https://ropsten.infura.io/v3/" + conf.InfuraProjectID)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	c := upvest.NewClient(conf.UpvestBaseURL, nil)
@@ -75,25 +83,24 @@ func main() {
 
 	w, err := clienteleClient.Wallet.Get(conf.UpvestWalletID)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	fromAddress := common.HexToAddress(w.Address)
 
 	nonce, err := ethClient.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
-	fmt.Println(fromAddress.Hex(), nonce)
 
 	gasPrice, err := ethClient.SuggestGasPrice(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	parsedABI, err := abi.JSON(strings.NewReader(conf.SmartContractABI))
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	auth := newUpvestTransactor(clienteleClient)
@@ -104,9 +111,34 @@ func main() {
 
 	address, tx, _, err := bind.DeployContract(auth, parsedABI, common.FromHex(conf.SmartContractBytecode), ethClient, "1.0")
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
-	fmt.Printf("The Address of the conract is: %v\nThe transaction hash is %v\n", address.Hex(), tx.Hash().Hex())
+	return address.Hex(), tx.Hash().Hex()
 
+}
+
+func main() {
+	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Timeout(60 * time.Second))
+
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		address, hash := deployContract()
+		body := fmt.Sprintf("The address of the contract is: \n%v\n\nThe transaction hash is: \n%v\n", address, hash)
+		w.Write([]byte(body))
+	})
+
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedHeaders:   []string{"*"},
+		AllowCredentials: true,
+	})
+
+	log.Printf("listening on %d", listenPort)
+	http.ListenAndServe(fmt.Sprintf(":%d", listenPort), c.Handler(r))
 }
