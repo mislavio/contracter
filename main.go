@@ -11,10 +11,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/postgres"
+	"github.com/mislavio/contracter/accounts"
+	"github.com/mislavio/contracter/auth"
+	"github.com/mislavio/contracter/contracts"
 	"github.com/rs/cors"
 	"gopkg.in/yaml.v2"
 
@@ -39,6 +45,8 @@ type configuration struct {
 }
 
 const listenPort int = 8000
+
+var jwtauth *auth.ContracterJWT
 
 func getConfig() (*configuration, error) {
 	var conf configuration
@@ -118,7 +126,34 @@ func deployContract() (string, string) {
 
 }
 
+func writeJSONResponse(w http.ResponseWriter, content []byte) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(content)
+}
+
+func init() {
+	jwtauth = &auth.ContracterJWT{SigningKey: []byte("very_secret_secret"), Signer: jwt.SigningMethodHS256}
+}
+
 func main() {
+	db, err := gorm.Open("postgres", "host=localhost port=5432 user=mislav dbname=contracter sslmode=disable")
+	if err != nil {
+		log.Print(err)
+	}
+	defer db.Close()
+	db.LogMode(true)
+
+	if err := db.DB().Ping(); err != nil {
+		log.Fatal(err)
+	}
+	db.AutoMigrate(
+		&accounts.Account{},
+		&auth.Credentials{},
+		&auth.OAuthCredentials{},
+		&contracts.Contract{},
+		&contracts.MyContract{},
+	)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -127,10 +162,17 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		address, hash := deployContract()
-		body := fmt.Sprintf("The address of the contract is: \n%v\n\nThe transaction hash is: \n%v\n", address, hash)
-		w.Write([]byte(body))
+	r.Mount("/auth", auth.Router(db, jwtauth))
+
+	r.Group(func(r chi.Router) {
+		r.Use(auth.Verifier(jwtauth))
+		r.Use(auth.AccountAuthenticator)
+
+		r.Post("contracts/deploy", func(w http.ResponseWriter, r *http.Request) {
+			address, hash := deployContract()
+			body := fmt.Sprintf("The address of the contract is: \n%v\n\nThe transaction hash is: \n%v\n", address, hash)
+			w.Write([]byte(body))
+		})
 	})
 
 	c := cors.New(cors.Options{
@@ -140,5 +182,5 @@ func main() {
 	})
 
 	log.Printf("listening on %d", listenPort)
-	http.ListenAndServe(fmt.Sprintf(":%d", listenPort), c.Handler(r))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", listenPort), c.Handler(r)))
 }
