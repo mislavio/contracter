@@ -166,9 +166,9 @@ func main() {
 
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Verifier(jwtauth))
-		r.Use(auth.AccountAuthenticator)
+		r.Use(auth.AccountAuthenticator(db))
 
-		r.Post("contracts/deploy", func(w http.ResponseWriter, r *http.Request) {
+		r.Post("/contracts/deploy", func(w http.ResponseWriter, r *http.Request) {
 			address, hash := deployContract()
 			body := fmt.Sprintf("The address of the contract is: \n%v\n\nThe transaction hash is: \n%v\n", address, hash)
 			w.Write([]byte(body))

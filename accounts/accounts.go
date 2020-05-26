@@ -49,3 +49,8 @@ func (a *Account) ComparePassword(p string) error {
 func (a *Account) FindByEmailOrFalse(e string, db *gorm.DB) bool {
 	return db.Where("email = ?", e).Find(a).RecordNotFound()
 }
+
+// FindByIDOrFalse returns false if record not found.
+func (a *Account) FindByIDOrFalse(id string, db *gorm.DB) bool {
+	return db.Where("id = ?", id).Find(a).RecordNotFound()
+}

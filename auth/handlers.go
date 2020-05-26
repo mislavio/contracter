@@ -2,11 +2,11 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-chi/render"
@@ -42,15 +42,24 @@ type SignInResponse struct {
 	Email     string    `json:"email"`
 	FirstName string    `json:"firstName"`
 	LastName  string    `json:"lastName"`
-	Cookie    string    `json:"-"`
+	Token     string    `json:"token"`
 }
 
 // VerifyResponse represents the email verification response
 type VerifyResponse struct{}
 
+// WhoAmIResponse represents a sign in response.
+type WhoAmIResponse struct {
+	ID        uuid.UUID `json:"id"`
+	Email     string    `json:"email"`
+	FirstName string    `json:"firstName"`
+	LastName  string    `json:"lastName"`
+	Token     string    `json:"token"`
+}
+
 // NewSignInResponse returns the signup response
-func NewSignInResponse(a *accounts.Account, c string) *SignInResponse {
-	return &SignInResponse{ID: a.ID, Email: a.Email, FirstName: a.FirstName, LastName: a.LastName, Cookie: c}
+func NewSignInResponse(a *accounts.Account, t string) *SignInResponse {
+	return &SignInResponse{ID: a.ID, Email: a.Email, FirstName: a.FirstName, LastName: a.LastName, Token: t}
 }
 
 // Bind implements the binder interface.
@@ -71,18 +80,18 @@ func (a *SignUpResponse) Render(w http.ResponseWriter, r *http.Request) error {
 
 // Render implements the renderer interface.
 func (v *VerifyResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	render.Status(r, 204)
+	render.Status(r, 200)
 	return nil
 }
 
 // Render implements the renderer interface.
 func (s *SignInResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	http.SetCookie(w, &http.Cookie{
-		Name:    "jwt",
-		Value:   s.Cookie,
-		Secure:  true,
-		Expires: time.Now().Add(time.Hour),
-	})
+	render.Status(r, 200)
+	return nil
+}
+
+// Render implements the renderer interface.
+func (s *WhoAmIResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, 200)
 	return nil
 }
@@ -195,6 +204,23 @@ func VerifyEmail(db *gorm.DB) http.HandlerFunc {
 	})
 }
 
+// WhoAmI returns current account information
+func WhoAmI() http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		a, _ := accountFromContext(ctx)
+		token, _, _ := tokenFromContext(ctx)
+
+		render.Render(w, r, &WhoAmIResponse{
+			ID:        a.ID,
+			Email:     a.Email,
+			FirstName: a.FirstName,
+			LastName:  a.LastName,
+			Token:     token.Raw,
+		})
+	})
+}
+
 // Middlewares
 
 // Verifier is Contracters JWT verification middleware
@@ -220,38 +246,41 @@ func Verifier(j *ContracterJWT) func(http.Handler) http.Handler {
 }
 
 // AccountAuthenticator is the Contracter authentication middleware
-func AccountAuthenticator(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		t, _, err := tokenFromContext(ctx)
+func AccountAuthenticator(db *gorm.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			t, claims, err := tokenFromContext(ctx)
 
-		if err != nil {
-			log.Print(err)
-			http.Error(w, http.StatusText(401), 401)
-			return
-		}
+			if err != nil {
+				log.Print(err)
+				http.Error(w, http.StatusText(401), 401)
+				return
+			}
 
-		if t == nil || !t.Valid {
-			http.Error(w, http.StatusText(401), 401)
-			return
-		}
+			if t == nil || !t.Valid {
+				http.Error(w, http.StatusText(401), 401)
+				return
+			}
 
-		// a, err := claims.GetAccountFromClaims()
-		// if err != nil {
-		// 	http.Error(w, http.StatusText(401), 401)
-		// 	return
-		// }
+			a, err := claims.GetAccountFromClaims(db)
+			if err != nil {
+				fmt.Print(err)
+				http.Error(w, "we couldn't find your account", 401)
+				return
+			}
 
-		// ctx = newContextWithAccount(ctx, a)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+			ctx = newContextWithAccount(ctx, a)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 // Helpers
 
 func validateEmailAndPassword(e string, p string) error {
 	p = strings.TrimSpace(p)
-	if len(p) < 5 {
+	if len(p) < 3 {
 		return errors.New("password must be longer than 5 characters")
 	}
 	// Taken from https://www.alexedwards.net/blog/validation-snippets-for-go#email-validation

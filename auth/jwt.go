@@ -2,16 +2,14 @@ package auth
 
 import (
 	"errors"
-	"fmt"
+	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+	"github.com/jinzhu/gorm"
 	"github.com/mislavio/contracter/accounts"
-	"github.com/mislavio/contracter/helpers"
-	uuid "github.com/satori/go.uuid"
 	"golang.org/x/net/context"
 )
 
@@ -59,11 +57,16 @@ func (c ContracterClaims) Valid() error {
 }
 
 // GetAccountFromClaims retrieves the accounts.Account from the JWT claims
-func (c ContracterClaims) GetAccountFromClaims() (*accounts.Account, error) {
-	if c.Subject == strconv.FormatUint(1, 10) {
-		return &accounts.Account{BaseModel: helpers.BaseModel{ID: uuid.NewV4()}}, nil
+func (c ContracterClaims) GetAccountFromClaims(db *gorm.DB) (*accounts.Account, error) {
+	a := &accounts.Account{}
+
+	log.Printf("%v", c.Subject)
+
+	if a.FindByIDOrFalse(c.Subject, db) {
+		return &accounts.Account{}, errors.New("auth: account does not exist")
 	}
-	return &accounts.Account{}, errors.New("auth: account does not exist")
+
+	return a, nil
 }
 
 // Keyfunc returns the key used to sign the JWTs
@@ -74,6 +77,15 @@ func (j *ContracterJWT) Keyfunc(t *jwt.Token) (interface{}, error) {
 func newContextWithAccount(ctx context.Context, a *accounts.Account) context.Context {
 	ctx = context.WithValue(ctx, AccountCtxKey, a)
 	return ctx
+}
+
+func accountFromContext(ctx context.Context) (*accounts.Account, error) {
+	a, ok := ctx.Value(AccountCtxKey).(*accounts.Account)
+	if !ok {
+		return &accounts.Account{}, errors.New("auth: account not found in context")
+	}
+
+	return a, nil
 }
 
 func tokenFromContext(ctx context.Context) (*jwt.Token, ContracterClaims, error) {
@@ -92,7 +104,6 @@ func tokenFromContext(ctx context.Context) (*jwt.Token, ContracterClaims, error)
 }
 
 func findTokenFromRequest(r *http.Request) string {
-	fmt.Println(r.Cookie("jwt"))
 	if cookie, err := r.Cookie("jwt"); err != http.ErrNoCookie {
 		return cookie.Value
 	}

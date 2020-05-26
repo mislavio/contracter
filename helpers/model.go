@@ -1,7 +1,6 @@
 package helpers
 
 import (
-	"log"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -20,7 +19,6 @@ type BaseModel struct {
 
 // BeforeCreate will set a UUID rather than numeric ID.
 func (base *BaseModel) BeforeCreate(scope *gorm.Scope) error {
-	log.Println("HERE: \n\n\n\n I was triggered!!!")
 	uuid := uuid.NewV4()
 	return scope.SetColumn("id", uuid)
 }

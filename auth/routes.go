@@ -12,5 +12,6 @@ func Router(db *gorm.DB, j *ContracterJWT) chi.Router {
 	r.Post("/signup", SignUp(db))
 	r.Post("/signin", SignIn(db, j))
 	r.Get("/verify", VerifyEmail(db))
+	r.With(Verifier(j), AccountAuthenticator(db)).Get("/me", WhoAmI())
 	return r
 }
